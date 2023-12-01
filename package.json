@@ -13,10 +13,10 @@
     "node": ">=6.14.2"
   },
   "dependencies": {
-    "cross-spawn": "^6.0.5",
-    "napi-thread-safe-callback": "0.0.6",
-    "noble": "^1.9.1",
-    "node-addon-api": "^1.1.0",
+    "cross-spawn": "^7.0.3",
+    "napi-thread-safe-callback": "^0.0.6",
+    "noble": "abandonware/noble",
+    "node-addon-api": "^7.0.0",
     "node-pre-gyp": "^0.17.0"
   },
   "scripts": {

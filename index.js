@@ -1,5 +1,3 @@
-'use strict';
-
 const os = require('os');
 
 // noble-mac acts as a shim to noble.
