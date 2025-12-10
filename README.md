@@ -1,9 +1,7 @@
 
-> Note: this project was integrated in [@abandonware/noble](https://github.com/abandonware/noble) and is no longer actively maintained
-
 # Noble (Node.js Bluetooth LE) for MacOS
 
-[![Build Status](https://travis-ci.com/Timeular/noble-mac.svg?branch=master)](https://travis-ci.com/Timeular/noble-mac)
+![CI](https://github.com/Timeular/noble-mac/actions/workflows/ci.yml/badge.svg)
 
 _The mac bindings in the [`noble`](https://github.com/sandeepmistry/noble) repository use a XPC connection and an undocumented protocol to communicate directly with the bluetooth daemon.
 This is error prone, as the protocol needs to be reverse engineered by sniffing the communication between a regular program which uses the official CoreBluetooth API and the 
@@ -12,8 +10,8 @@ bluetooth daemon. Since the protocol is not public Apple can change it at anytim
 This package provides the same functionality as the regular noble mac bindings using the official [CoreBluetooth API](https://developer.apple.com/documentation/corebluetooth).
 
 ## System Requirements
- * Node.js v6.14.2 or later.
- * macOS 10.7 or later
+ * Node.js 18 or later (N-API)
+ * macOS 13 or later (arm64 + x64 prebuilds)
 
 ## Prerequisites
 
@@ -21,13 +19,13 @@ This package provides the same functionality as the regular noble mac bindings u
  * install [Xcode](https://itunes.apple.com/ca/app/xcode/id497799835?mt=12)
 
 ## Installation
-Currently, it has not been published yet on `npm`, so please try to add the dependence as the following.
-```json
-"dependencies": {
-    "noble-mac": "https://github.com/Timeular/noble-mac.git"
-}
+Prebuilt binaries are produced for macOS (arm64/x64). Install via npm:
+
+```bash
+npm install noble-mac
 ```
-Then, please run `npm install` again.
+
+If a prebuild is not available for your platform, the install step will fall back to building from source. You need Xcode command line tools installed.
 
 ## Usage
 Simply require `noble-mac` instead of `noble`:

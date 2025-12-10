@@ -1,0 +1,32 @@
+name: Release Prebuilds
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  upload:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-13
+            arch: x64
+          - runner: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          check-latest: true
+      - name: Install deps
+        run: npm ci
+      - name: Build prebuilds
+        run: npm run build:prebuild
+      - name: Upload prebuild assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: prebuilds/**/*
+

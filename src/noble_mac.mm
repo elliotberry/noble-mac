@@ -8,223 +8,272 @@
 
 #include "napi_objc.h"
 
-#define THROW(msg) \
-Napi::TypeError::New(info.Env(), msg).ThrowAsJavaScriptException(); \
-return Napi::Value();
+#include <string>
 
-#define ARG1(type1) \
-if (!info[0].Is##type1()) { \
-    THROW("There should be one argument: (" #type1 ")") \
+namespace {
+
+void EnsureManager(const Napi::CallbackInfo& info, BLEManager* manager) {
+    if (!manager) {
+        Napi::TypeError::New(info.Env(), "BLEManager has already been cleaned up").ThrowAsJavaScriptException();
+        return;
+    }
 }
 
-#define ARG2(type1, type2) \
-if (!info[0].Is##type1() || !info[1].Is##type2()) { \
-    THROW("There should be 2 arguments: (" #type1 ", " #type2 ")"); \
+void EnsureArgs(const Napi::CallbackInfo& info, size_t expected, const std::string& signature) {
+    if (info.Length() < expected) {
+        Napi::TypeError::New(info.Env(), "Expected arguments: " + signature).ThrowAsJavaScriptException();
+    }
 }
 
-#define ARG3(type1, type2, type3) \
-if (!info[0].Is##type1() || !info[1].Is##type2() || !info[2].Is##type3()) { \
-    THROW("There should be 3 arguments: (" #type1 ", " #type2 ", " #type3 ")"); \
+NSString* RequireUuidString(const Napi::CallbackInfo& info, size_t idx, const std::string& label) {
+    if (info.Length() <= idx || !info[idx].IsString()) {
+        Napi::TypeError::New(info.Env(), "Expected string for " + label).ThrowAsJavaScriptException();
+        return nil;
+    }
+    return napiToUuidString(info[idx].As<Napi::String>());
 }
 
-#define ARG4(type1, type2, type3, type4) \
-if (!info[0].Is##type1() || !info[1].Is##type2() || !info[2].Is##type3() || !info[3].Is##type4()) { \
-    THROW("There should be 4 arguments: (" #type1 ", " #type2 ", " #type3 ", " #type4 ")"); \
+NSArray* OptionalUuidArray(const Napi::CallbackInfo& info, size_t idx) {
+    if (info.Length() <= idx) {
+        return nil;
+    }
+    return getUuidArray(info[idx]);
 }
 
-#define ARG5(type1, type2, type3, type4, type5) \
-if (!info[0].Is##type1() || !info[1].Is##type2() || !info[2].Is##type3() || !info[3].Is##type4() || !info[4].Is##type5()) { \
-    THROW("There should be 5 arguments: (" #type1 ", " #type2 ", " #type3 ", " #type4 ", " #type5 ")"); \
+bool OptionalBool(const Napi::CallbackInfo& info, size_t idx, bool def) {
+    if (info.Length() <= idx) {
+        return def;
+    }
+    return getBool(info[idx], def);
 }
 
-#define CHECK_MANAGER() \
-if(!manager) { \
-    THROW("BLEManager has already been cleaned up"); \
+NSData* RequireData(const Napi::CallbackInfo& info, size_t idx, const std::string& label) {
+    if (info.Length() <= idx || !info[idx].IsBuffer()) {
+        Napi::TypeError::New(info.Env(), "Expected Buffer for " + label).ThrowAsJavaScriptException();
+        return nil;
+    }
+    return napiToData(info[idx].As<Napi::Buffer<Byte>>());
 }
+
+NSNumber* RequireNumber(const Napi::CallbackInfo& info, size_t idx, const std::string& label) {
+    if (info.Length() <= idx || !info[idx].IsNumber()) {
+        Napi::TypeError::New(info.Env(), "Expected number for " + label).ThrowAsJavaScriptException();
+        return nil;
+    }
+    return napiToNumber(info[idx].As<Napi::Number>());
+}
+
+}  // namespace
 
 NobleMac::NobleMac(const Napi::CallbackInfo& info) : ObjectWrap(info) {
+}
+
+NobleMac::~NobleMac() {
+    Cleanup();
+}
+
+void NobleMac::Cleanup() {
+    if (manager) {
+        manager = nil;
+    }
 }
 
 Napi::Value NobleMac::Init(const Napi::CallbackInfo& info) {
     Napi::Function emit = info.This().As<Napi::Object>().Get("emit").As<Napi::Function>();
     manager = [[BLEManager alloc] init:info.This() with:emit];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // startScanning(serviceUuids, allowDuplicates)
 Napi::Value NobleMac::Scan(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
+    EnsureManager(info, manager);
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
     NSArray* array = getUuidArray(info[0]);
     // default value NO
-    auto duplicates = getBool(info[1], NO);
+    auto duplicates = OptionalBool(info, 1, NO);
     [manager scan:array allowDuplicates:duplicates];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // stopScanning()
 Napi::Value NobleMac::StopScan(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
+    EnsureManager(info, manager);
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
     [manager stopScan];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // connect(deviceUuid)
 Napi::Value NobleMac::Connect(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG1(String)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
+    EnsureManager(info, manager);
+    EnsureArgs(info, 1, "(string uuid)");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
     [manager connect:uuid];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // disconnect(deviceUuid)
 Napi::Value NobleMac::Disconnect(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG1(String)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
+    EnsureManager(info, manager);
+    EnsureArgs(info, 1, "(string uuid)");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
     [manager disconnect:uuid];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // updateRssi(deviceUuid)
 Napi::Value NobleMac::UpdateRSSI(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG1(String)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
+    EnsureManager(info, manager);
+    EnsureArgs(info, 1, "(string uuid)");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
     [manager updateRSSI:uuid];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // discoverServices(deviceUuid, uuids)
 Napi::Value NobleMac::DiscoverServices(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG1(String)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
-    NSArray* array = getUuidArray(info[1]);
+    EnsureManager(info, manager);
+    EnsureArgs(info, 1, "(string uuid[, string[] serviceUuids])");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
+    NSArray* array = OptionalUuidArray(info, 1);
     [manager discoverServices:uuid serviceUuids:array];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // discoverIncludedServices(deviceUuid, serviceUuid, serviceUuids)
 Napi::Value NobleMac::DiscoverIncludedServices(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG2(String, String)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
-    auto service = napiToUuidString(info[1].As<Napi::String>());
-    NSArray* serviceUuids = getUuidArray(info[2]);
+    EnsureManager(info, manager);
+    EnsureArgs(info, 2, "(string uuid, string serviceUuid[, string[] serviceUuids])");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
+    auto service = RequireUuidString(info, 1, "serviceUuid");
+    NSArray* serviceUuids = OptionalUuidArray(info, 2);
     [manager discoverIncludedServices:uuid forService:service services:serviceUuids];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // discoverCharacteristics(deviceUuid, serviceUuid, characteristicUuids)
 Napi::Value NobleMac::DiscoverCharacteristics(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG2(String, String)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
-    auto service = napiToUuidString(info[1].As<Napi::String>());
-    NSArray* characteristics = getUuidArray(info[2]);
+    EnsureManager(info, manager);
+    EnsureArgs(info, 2, "(string uuid, string serviceUuid[, string[] characteristicUuids])");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
+    auto service = RequireUuidString(info, 1, "serviceUuid");
+    NSArray* characteristics = OptionalUuidArray(info, 2);
     [manager discoverCharacteristics:uuid forService:service characteristics:characteristics];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // read(deviceUuid, serviceUuid, characteristicUuid)
 Napi::Value NobleMac::Read(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG3(String, String, String)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
-    auto service = napiToUuidString(info[1].As<Napi::String>());
-    auto characteristic = napiToUuidString(info[2].As<Napi::String>());
+    EnsureManager(info, manager);
+    EnsureArgs(info, 3, "(string uuid, string serviceUuid, string characteristicUuid)");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
+    auto service = RequireUuidString(info, 1, "serviceUuid");
+    auto characteristic = RequireUuidString(info, 2, "characteristicUuid");
     [manager read:uuid service:service characteristic:characteristic];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // write(deviceUuid, serviceUuid, characteristicUuid, data, withoutResponse)
 Napi::Value NobleMac::Write(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG5(String, String, String, Buffer, Boolean)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
-    auto service = napiToUuidString(info[1].As<Napi::String>());
-    auto characteristic = napiToUuidString(info[2].As<Napi::String>());
-    auto data = napiToData(info[3].As<Napi::Buffer<Byte>>());
+    EnsureManager(info, manager);
+    EnsureArgs(info, 5, "(string uuid, string serviceUuid, string characteristicUuid, Buffer data, boolean withoutResponse)");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
+    auto service = RequireUuidString(info, 1, "serviceUuid");
+    auto characteristic = RequireUuidString(info, 2, "characteristicUuid");
+    auto data = RequireData(info, 3, "data");
     auto withoutResponse = info[4].As<Napi::Boolean>().Value();
     [manager write:uuid service:service characteristic:characteristic data:data withoutResponse:withoutResponse];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // notify(deviceUuid, serviceUuid, characteristicUuid, notify)
 Napi::Value NobleMac::Notify(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG4(String, String, String, Boolean)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
-    auto service = napiToUuidString(info[1].As<Napi::String>());
-    auto characteristic = napiToUuidString(info[2].As<Napi::String>());
+    EnsureManager(info, manager);
+    EnsureArgs(info, 4, "(string uuid, string serviceUuid, string characteristicUuid, boolean state)");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
+    auto service = RequireUuidString(info, 1, "serviceUuid");
+    auto characteristic = RequireUuidString(info, 2, "characteristicUuid");
     auto on = info[3].As<Napi::Boolean>().Value();
     [manager notify:uuid service:service characteristic:characteristic on:on];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // discoverDescriptors(deviceUuid, serviceUuid, characteristicUuid)
 Napi::Value NobleMac::DiscoverDescriptors(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG3(String, String, String)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
-    auto service = napiToUuidString(info[1].As<Napi::String>());
-    auto characteristic = napiToUuidString(info[2].As<Napi::String>());
+    EnsureManager(info, manager);
+    EnsureArgs(info, 3, "(string uuid, string serviceUuid, string characteristicUuid)");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
+    auto service = RequireUuidString(info, 1, "serviceUuid");
+    auto characteristic = RequireUuidString(info, 2, "characteristicUuid");
     [manager discoverDescriptors:uuid service:service characteristic:characteristic];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // readValue(deviceUuid, serviceUuid, characteristicUuid, descriptorUuid)
 Napi::Value NobleMac::ReadValue(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG4(String, String, String, String)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
-    auto service = napiToUuidString(info[1].As<Napi::String>());
-    auto characteristic = napiToUuidString(info[2].As<Napi::String>());
-    auto descriptor = napiToUuidString(info[3].As<Napi::String>());
+    EnsureManager(info, manager);
+    EnsureArgs(info, 4, "(string uuid, string serviceUuid, string characteristicUuid, string descriptorUuid)");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
+    auto service = RequireUuidString(info, 1, "serviceUuid");
+    auto characteristic = RequireUuidString(info, 2, "characteristicUuid");
+    auto descriptor = RequireUuidString(info, 3, "descriptorUuid");
     [manager readValue:uuid service:service characteristic:characteristic descriptor:descriptor];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // writeValue(deviceUuid, serviceUuid, characteristicUuid, descriptorUuid, data)
 Napi::Value NobleMac::WriteValue(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG5(String, String, String, String, Buffer)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
-    auto service = napiToUuidString(info[1].As<Napi::String>());
-    auto characteristic = napiToUuidString(info[2].As<Napi::String>());
-    auto descriptor = napiToUuidString(info[3].As<Napi::String>());
-    auto data = napiToData(info[4].As<Napi::Buffer<Byte>>());
+    EnsureManager(info, manager);
+    EnsureArgs(info, 5, "(string uuid, string serviceUuid, string characteristicUuid, string descriptorUuid, Buffer data)");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
+    auto service = RequireUuidString(info, 1, "serviceUuid");
+    auto characteristic = RequireUuidString(info, 2, "characteristicUuid");
+    auto descriptor = RequireUuidString(info, 3, "descriptorUuid");
+    auto data = RequireData(info, 4, "data");
     [manager writeValue:uuid service:service characteristic:characteristic descriptor:descriptor data: data];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // readHandle(deviceUuid, handle)
 Napi::Value NobleMac::ReadHandle(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG2(String, Number)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
-    auto handle = napiToNumber(info[1].As<Napi::Number>());
+    EnsureManager(info, manager);
+    EnsureArgs(info, 2, "(string uuid, number handle)");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
+    auto handle = RequireNumber(info, 1, "handle");
     [manager readHandle:uuid handle:handle];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 // writeHandle(deviceUuid, handle, data, (unused)withoutResponse)
 Napi::Value NobleMac::WriteHandle(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    ARG3(String, Number, Buffer)
-    auto uuid = napiToUuidString(info[0].As<Napi::String>());
-    auto handle = napiToNumber(info[1].As<Napi::Number>());
-    auto data = napiToData(info[2].As<Napi::Buffer<Byte>>());
+    EnsureManager(info, manager);
+    EnsureArgs(info, 3, "(string uuid, number handle, Buffer data)");
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    auto uuid = RequireUuidString(info, 0, "deviceUuid");
+    auto handle = RequireNumber(info, 1, "handle");
+    auto data = RequireData(info, 2, "data");
     [manager writeHandle:uuid handle:handle data: data];
-    return Napi::Value();
+    return info.Env().Undefined();
 }
 
 Napi::Value NobleMac::Stop(const Napi::CallbackInfo& info) {
-    CHECK_MANAGER()
-    CFRelease((__bridge CFTypeRef)manager);
-    manager = nil;
-    return Napi::Value();
+    EnsureManager(info, manager);
+    if (info.Env().IsExceptionPending()) return info.Env().Undefined();
+    Cleanup();
+    return info.Env().Undefined();
 }
 
 Napi::Function NobleMac::GetClass(Napi::Env env) {

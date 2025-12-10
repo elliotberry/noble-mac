@@ -1,9 +1,8 @@
 #pragma once
 
 #include <napi.h>
+#include <functional>
 #include "peripheral.h"
-
-class ThreadSafeCallback;
 
 class Emit {
 public:
@@ -26,5 +25,8 @@ public:
     void ReadHandle(const std::string& uuid, int descriptorHandle, const std::vector<uint8_t>& data);
     void WriteHandle(const std::string& uuid, int descriptorHandle);
 protected:
-    std::shared_ptr<ThreadSafeCallback> mCallback;
+    struct JsWork;
+    void Dispatch(std::function<void(Napi::Env, Napi::Function, const Napi::Object&)> fn);
+    Napi::ThreadSafeFunction tsfn;
+    Napi::ObjectReference receiverRef;
 };

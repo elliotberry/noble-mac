@@ -8,6 +8,7 @@ class NobleMac : public Napi::ObjectWrap<NobleMac>
 {
 public:
     NobleMac(const Napi::CallbackInfo&);
+    ~NobleMac();
     Napi::Value Init(const Napi::CallbackInfo&);
     Napi::Value Scan(const Napi::CallbackInfo&);
     Napi::Value StopScan(const Napi::CallbackInfo&);
@@ -30,5 +31,6 @@ public:
     static Napi::Function GetClass(Napi::Env);
 
 private:
-    BLEManager* manager;
+    void Cleanup();
+    BLEManager* manager = nullptr;
 };
