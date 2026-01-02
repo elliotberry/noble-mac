@@ -16,7 +16,7 @@
     "env-paths": "^3.0.0",
     "noble": "abandonware/noble",
     "node-addon-api": "^8.5.0",
-    "node-gyp-build": "^4.8.1",
+    "node-gyp-build": "^4.8.4",
     "node-pre-gyp": "^0.17.0"
   },
   "devDependencies": {

@@ -7,6 +7,9 @@
 #include "callbacks.h"
 
 #include <algorithm>
+#include <exception>
+#include <memory>
+#include <string>
 #include <utility>
 
 namespace {
@@ -99,9 +102,35 @@ void Emit::Dispatch(std::function<void(Napi::Env, Napi::Function, const Napi::Ob
         work,
         [this](Napi::Env env, Napi::Function jsCallback, JsWork* data) {
             Napi::HandleScope scope(env);
+            std::unique_ptr<JsWork> guard(data);
             auto receiver = receiverRef.Value();
-            data->fn(env, jsCallback, receiver);
-            delete data;
+
+            try {
+                guard->fn(env, jsCallback, receiver);
+            } catch (const Napi::Error& e) {
+                // Prevent C++ exceptions from escaping through N-API callbacks.
+                napi_fatal_exception(env, e.Value());
+                return;
+            } catch (const std::exception& e) {
+                Napi::Error err = Napi::Error::New(
+                    env,
+                    std::string("noble-mac: uncaught exception in N-API callback: ") + e.what());
+                napi_fatal_exception(env, err.Value());
+                return;
+            } catch (...) {
+                Napi::Error err = Napi::Error::New(env, "noble-mac: uncaught exception in N-API callback");
+                napi_fatal_exception(env, err.Value());
+                return;
+            }
+
+            // If the project is built without C++ exceptions, a JS throw may still be pending here.
+            bool pending = false;
+            if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {
+                napi_value exc{};
+                if (napi_get_and_clear_last_exception(env, &exc) == napi_ok) {
+                    napi_fatal_exception(env, exc);
+                }
+            }
         });
     if (status != napi_ok) {
         delete work;
