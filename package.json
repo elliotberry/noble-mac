@@ -13,11 +13,11 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@mapbox/node-pre-gyp": "^2.0.3",
     "env-paths": "^3.0.0",
     "noble": "abandonware/noble",
     "node-addon-api": "^8.5.0",
-    "node-gyp-build": "^4.8.4",
-    "node-pre-gyp": "^0.17.0"
+    "node-gyp-build": "^4.8.4"
   },
   "devDependencies": {
     "prebuildify": "^6.0.1"
